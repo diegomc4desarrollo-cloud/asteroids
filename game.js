@@ -2,8 +2,28 @@
 
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
-const W = 800;
-const H = 600;
+
+// Dimensiones lógicas del campo de juego. No son fijas: en escritorio valen
+// 800×600 (el tamaño CSS del canvas) y en móvil, la pantalla completa.
+let W = 800;
+let H = 600;
+let dpr = 1;
+
+function resizeCanvas() {
+  // El canvas puede estar oculto (p. ej. móvil en vertical): conservar el
+  // tamaño anterior en vez de dejar el campo a cero.
+  if (!canvas.clientWidth || !canvas.clientHeight) return;
+
+  dpr = window.devicePixelRatio || 1;
+  W = Math.round(canvas.clientWidth);
+  H = Math.round(canvas.clientHeight);
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);  // dibujar en px lógicos, no de dispositivo
+}
+
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', resizeCanvas);
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 
@@ -364,6 +384,7 @@ let ship, bullets, asteroids, particles, powerUps;
 let score, lives, level;
 let state;      // 'playing' | 'dead' | 'gameover'
 let deadTimer;
+let paused;     // solo lo activa la capa táctil (al girar el móvil a vertical)
 let tripleShotActive, tripleShotTimer, tripleShotSpawnedThisLevel;
 let shieldActive, shieldTimer;
 let hyperSpeedActive, hyperSpeedTimer;
@@ -391,6 +412,7 @@ function initGame() {
   lives  = 3;
   level  = 1;
   state  = 'playing';
+  paused = false;
   tripleShotActive = false;
   tripleShotTimer  = 0;
   tripleShotSpawnedThisLevel = false;
@@ -459,6 +481,8 @@ function killShip() {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 function update(dt) {
+  if (paused) return;
+
   if (state === 'gameover') {
     if (pressed('Space')) initGame();
     particles.forEach(p => p.update(dt));
@@ -599,19 +623,27 @@ function drawLifeIcon(x, y) {
 }
 
 function drawHUD() {
+  // Título centrado en la banda superior
   ctx.fillStyle = '#fff';
-  ctx.font = '15px monospace';
+  ctx.font      = 'bold 20px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ASTEROID DIEGO', W / 2, 28);
 
+  // Columna izquierda: puntuación, nivel y bombas en inventario
+  ctx.font      = '15px monospace';
   ctx.textAlign = 'left';
   ctx.fillText(`SCORE  ${score}`, 14, 26);
-
-  ctx.textAlign = 'center';
-  ctx.fillText(`NIVEL ${level}`, W / 2, 26);
+  ctx.fillText(`NIVEL ${level}`, 14, 46);
+  if (novaBombs > 0) {
+    ctx.fillStyle = '#ff4444';
+    ctx.fillText(`BOMBAS NOVA: ${novaBombs}  [B]`, 14, 66);
+  }
 
   for (let i = 0; i < lives; i++)
     drawLifeIcon(W - 16 - i * 22, 18);
 
-  let statusY = 46;
+  // Avisos de power-up activo, apilados bajo el título
+  let statusY = 52;
   ctx.textAlign = 'center';
   if (tripleShotActive) {
     ctx.fillStyle = '#ffa500';
@@ -628,12 +660,6 @@ function drawHUD() {
     ctx.fillText(`HIPERPROPULSIÓN ${Math.ceil(hyperSpeedTimer)}s`, W / 2, statusY);
     statusY += 20;
   }
-
-  if (novaBombs > 0) {
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#ff4444';
-    ctx.fillText(`BOMBAS NOVA: ${novaBombs}  [B]`, 14, H - 16);
-  }
 }
 
 function drawOverlay(title, sub) {
@@ -647,8 +673,15 @@ function drawOverlay(title, sub) {
 }
 
 function draw() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, W, H);
+
+  // Recuadro del campo de maniobra: marca exactamente la frontera de wrap()
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth   = 2;
+  ctx.strokeRect(1, 1, W - 2, H - 2);
 
   particles.forEach(p => p.draw());
   asteroids.forEach(a => a.draw());
@@ -658,8 +691,12 @@ function draw() {
 
   drawHUD();
 
-  if (state === 'gameover')
-    drawOverlay('GAME OVER', `PUNTAJE: ${score}   —   ESPACIO PARA REINICIAR`);
+  if (state === 'gameover') {
+    const hint = document.documentElement.classList.contains('touch')
+      ? 'TOCA LA PANTALLA PARA REINICIAR'
+      : 'ESPACIO PARA REINICIAR';
+    drawOverlay('GAME OVER', `PUNTAJE: ${score}   —   ${hint}`);
+  }
 }
 
 // ── Loop principal ────────────────────────────────────────────────────────────
@@ -673,5 +710,6 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
+resizeCanvas();
 initGame();
 requestAnimationFrame(loop);
