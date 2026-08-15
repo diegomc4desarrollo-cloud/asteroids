@@ -57,7 +57,14 @@
       bottom: calc(env(safe-area-inset-bottom) + 14px);
       z-index: 2;
     }
-    html.touch #pad-left  { left:  calc(env(safe-area-inset-left)  + 14px); width: 208px; height: 208px; }
+    html.touch #pad-left {
+      left: calc(env(safe-area-inset-left) + 14px);
+      width: 208px;
+      height: 264px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
     html.touch #pad-right { right: calc(env(safe-area-inset-right) + 14px); }
 
     .tbtn {
@@ -77,13 +84,60 @@
     }
     .tbtn:active { background: rgba(255, 255, 255, 0.22); }
 
-    /* Cruceta: arriba propulsa, laterales giran, abajo lanza la Bomba Nova */
-    .tbtn.up    { left: 70px; top: 0; }
-    .tbtn.left  { left: 0;    top: 70px; }
-    .tbtn.right { left: 140px; top: 70px; }
-    .tbtn.bomb  { left: 70px; top: 140px; visibility: hidden;
-                  border-color: rgba(255, 68, 68, 0.7); }
+    /* Botón de Bomba Nova: pequeño, sobre el joystick, solo visible con bombas */
+    .tbtn.bomb {
+      position: static;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 8px;
+      border-radius: 10px;
+      font-size: 18px;
+      visibility: hidden;
+      border-color: rgba(255, 68, 68, 0.7);
+    }
     #pad-left.has-bombs .tbtn.bomb { visibility: visible; }
+
+    /* Joystick analógico: base circular + palanca arrastrable */
+    #joystick {
+      position: relative;
+      width: 208px;
+      height: 208px;
+      margin-top: auto;
+      touch-action: none;
+    }
+    .joystick-base {
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 70%, rgba(255,255,255,0.02));
+      border: 1.5px solid rgba(255, 255, 255, 0.35);
+      touch-action: none;
+    }
+    .joystick-arrow {
+      position: absolute;
+      width: 0;
+      height: 0;
+      border: 7px solid transparent;
+      opacity: 0.35;
+    }
+    .joystick-arrow.up    { top: 12px;    left: 50%; margin-left: -7px; border-bottom-color: #fff; border-top: none; }
+    .joystick-arrow.down  { bottom: 12px; left: 50%; margin-left: -7px; border-top-color: #fff;    border-bottom: none; }
+    .joystick-arrow.left  { left: 12px;   top: 50%;  margin-top: -7px;  border-right-color: #fff;  border-left: none; }
+    .joystick-arrow.right { right: 12px;  top: 50%;  margin-top: -7px;  border-left-color: #fff;   border-right: none; }
+    .joystick-stick {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      left: 50%;
+      top: 50%;
+      margin: -38px 0 0 -38px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.35), rgba(255,255,255,0.12) 60%, rgba(255,255,255,0.08));
+      border: 1.5px solid rgba(255, 255, 255, 0.5);
+      transition: transform 0.12s ease-out;
+      touch-action: none;
+    }
+    .joystick-stick.dragging { transition: none; }
 
     .tbtn.fire {
       position: relative;
@@ -118,10 +172,16 @@
   <div id="stage">
     <canvas id="canvas"></canvas>
     <div id="pad-left">
-      <button class="tbtn up"    data-key="ArrowUp">▲</button>
-      <button class="tbtn left"  data-key="ArrowLeft">◀</button>
-      <button class="tbtn right" data-key="ArrowRight">▶</button>
-      <button class="tbtn bomb"  data-key="KeyB" id="btn-bomb">💣</button>
+      <button class="tbtn bomb" data-key="KeyB" id="btn-bomb">💣</button>
+      <div id="joystick">
+        <div class="joystick-base">
+          <div class="joystick-arrow up"></div>
+          <div class="joystick-arrow down"></div>
+          <div class="joystick-arrow left"></div>
+          <div class="joystick-arrow right"></div>
+          <div class="joystick-stick"></div>
+        </div>
+      </div>
     </div>
     <div id="pad-right">
       <button class="tbtn fire" data-key="Space" data-repeat="50">FUEGO</button>

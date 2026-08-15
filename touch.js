@@ -18,6 +18,19 @@
   // recalcular W/H.
   document.documentElement.classList.add('touch');
 
+  // ── Bloqueo de zoom nativo (iOS Safari) ─────────────────────────────────────
+  // 'gesturestart'/'gesturechange' cubre el pellizco con dos dedos, pero el
+  // zoom por doble-toque rápido lo arma el reconocedor de gestos de UIKit a
+  // partir del evento táctil "en bruto": llamar preventDefault() solo en el
+  // pointerdown/pointerup sintético (como ya hace cada .tbtn) no basta en
+  // todas las versiones de iOS, así que también se bloquea aquí el
+  // touchstart/touchend real. Deben ir con { passive: false }: sin eso,
+  // preventDefault() en eventos táctiles no tiene efecto en iOS.
+  document.addEventListener('gesturestart',  (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
+  document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchend',   (e) => e.preventDefault(), { passive: false });
+
   const releaseAll = () => { for (const code in keys) keys[code] = false; };
 
   // ── Botones ─────────────────────────────────────────────────────────────────
@@ -51,6 +64,60 @@
     btn.addEventListener('lostpointercapture', release);
     btn.addEventListener('contextmenu', (e) => e.preventDefault());
   }
+
+  // ── Joystick analógico (gira y propulsa) ────────────────────────────────────
+  const joyBase  = document.querySelector('#joystick .joystick-base');
+  const joyStick = document.querySelector('#joystick .joystick-stick');
+  let joyCenterX = 0, joyCenterY = 0, joyRadius = 1;
+
+  const DEADZONE_FRAC  = 0.15; // radio mínimo antes de registrar dirección
+  const AXIS_THRESHOLD = 0.35; // componente normalizada mínima por eje
+
+  const updateJoystickKeys = (dx, dy, rawDist) => {
+    if (rawDist < joyRadius * DEADZONE_FRAC) {
+      keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = false;
+      return;
+    }
+    const nx = dx / rawDist, ny = dy / rawDist;
+    // Cada eje se evalúa por separado: un arrastre diagonal activa giro y
+    // propulsión a la vez, como un stick analógico real.
+    keys['ArrowLeft']  = nx < -AXIS_THRESHOLD;
+    keys['ArrowRight'] = nx >  AXIS_THRESHOLD;
+    keys['ArrowUp']    = ny < -AXIS_THRESHOLD;
+  };
+
+  const handleJoyMove = (e) => {
+    const dx = e.clientX - joyCenterX;
+    const dy = e.clientY - joyCenterY;
+    const rawDist = Math.hypot(dx, dy);
+    const clamped = Math.min(rawDist, joyRadius);
+    const angle = Math.atan2(dy, dx);
+    joyStick.style.transform = `translate(${Math.cos(angle) * clamped}px, ${Math.sin(angle) * clamped}px)`;
+    updateJoystickKeys(dx, dy, rawDist);
+  };
+
+  const endJoyDrag = (e) => {
+    e.preventDefault();
+    joyStick.classList.remove('dragging');
+    joyStick.style.transform = 'translate(0, 0)';
+    keys['ArrowLeft'] = keys['ArrowRight'] = keys['ArrowUp'] = false;
+  };
+
+  joyBase.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    joyBase.setPointerCapture(e.pointerId);
+    const rect = joyBase.getBoundingClientRect();
+    joyCenterX = rect.left + rect.width / 2;
+    joyCenterY = rect.top + rect.height / 2;
+    joyRadius  = rect.width / 2;
+    joyStick.classList.add('dragging');
+    handleJoyMove(e);
+  });
+  joyBase.addEventListener('pointermove', handleJoyMove);
+  joyBase.addEventListener('pointerup', endJoyDrag);
+  joyBase.addEventListener('pointercancel', endJoyDrag);
+  joyBase.addEventListener('lostpointercapture', endJoyDrag);
+  joyBase.addEventListener('contextmenu', (e) => e.preventDefault());
 
   // ── Botón de Bomba Nova: solo visible si hay bombas en inventario ───────────
   const padLeft = document.getElementById('pad-left');

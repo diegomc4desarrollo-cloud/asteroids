@@ -72,10 +72,26 @@ class Bullet {
   }
 
   draw() {
-    ctx.fillStyle = '#fff';
+    const angle = Math.atan2(this.vy, this.vx);
+    const len   = 14; // longitud visual de la estela, no afecta al radio de colisión
+    const tailX = this.x - Math.cos(angle) * len;
+    const tailY = this.y - Math.sin(angle) * len;
+
+    const grad = ctx.createLinearGradient(tailX, tailY, this.x, this.y);
+    grad.addColorStop(0, 'rgba(255, 54, 224, 0)');
+    grad.addColorStop(1, PALETTE.bulletNeon);
+
+    ctx.save();
+    ctx.strokeStyle = grad;
+    ctx.shadowColor = PALETTE.bulletGlow;
+    ctx.shadowBlur  = 8;
+    ctx.lineWidth   = 3;
+    ctx.lineCap     = 'round';
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -109,6 +125,68 @@ const POWERUP_STYLES = {
   hyper:  { color: '#ffd700', label: 'HS', shape: 'triangle' },
   nova:   { color: '#ff4444', label: 'B',  shape: 'circle' },
 };
+
+// ── Paleta visual (fondo, nave, disparos, cráteres) ────────────────────────────
+const PALETTE = {
+  nebulaTop:    '#1a0b2e',
+  nebulaMid:    '#12233f',
+  nebulaBottom: '#0a2b30',
+  nebulaEdge:   '#050308',
+  star:         '#e8f0ff',
+  grid:         'rgba(120, 190, 255, 0.05)',
+  boundary:     'rgba(160, 210, 255, 0.55)',
+  shipNeon:     '#ff2fd6',
+  shipGlow:     '#ff8af0',
+  bulletNeon:   '#ff36e0',
+  bulletGlow:   '#ff9df5',
+  craterFill:   'rgba(10, 8, 18, 0.55)',
+  craterStroke: 'rgba(230, 230, 240, 0.35)',
+};
+
+// ── Fondo de nebulosa (degradado + estrellas + rejilla), cacheado por tamaño ──
+let bgGradient = null;
+let stars = [];
+let bgCacheW = 0, bgCacheH = 0;
+
+function rebuildBackgroundCache() {
+  bgGradient = ctx.createLinearGradient(0, 0, W, H);
+  bgGradient.addColorStop(0,    PALETTE.nebulaTop);
+  bgGradient.addColorStop(0.4,  PALETTE.nebulaMid);
+  bgGradient.addColorStop(0.7,  PALETTE.nebulaBottom);
+  bgGradient.addColorStop(1,    PALETTE.nebulaEdge);
+
+  const count = Math.max(80, Math.min(220, Math.round((W * H) / 3500)));
+  stars = [];
+  for (let i = 0; i < count; i++) {
+    stars.push({
+      x: rand(0, W),
+      y: rand(0, H),
+      r: rand(0.5, 1.6),
+      color: `rgba(232, 240, 255, ${rand(0.35, 1).toFixed(2)})`,
+    });
+  }
+  bgCacheW = W; bgCacheH = H;
+}
+
+function drawBackground() {
+  if (W !== bgCacheW || H !== bgCacheH) rebuildBackgroundCache();
+
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, W, H);
+
+  for (const s of stars) {
+    ctx.fillStyle = s.color;
+    ctx.fillRect(s.x, s.y, s.r, s.r);
+  }
+
+  const GRID_SPACING = 48;
+  ctx.strokeStyle = PALETTE.grid;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x += GRID_SPACING) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = 0; y <= H; y += GRID_SPACING) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+}
 
 // Formas prediseñadas (vértices normalizados) para asteroides grandes (tamaño 3)
 const LARGE_ASTEROID_SHAPES = [
@@ -155,6 +233,23 @@ class Asteroid {
         this.verts.push([Math.cos(a) * r, Math.sin(a) * r]);
       }
     }
+
+    // Cráteres decorativos: siempre dentro del contorno (el vértice más
+    // cercano del polígono está como mínimo al 60% del radio del centro).
+    const craterCount = size === 3 ? randInt(3, 4)
+                       : size === 2 ? randInt(1, 2)
+                       : (Math.random() < 0.5 ? 1 : 0);
+    this.craters = [];
+    for (let i = 0; i < craterCount; i++) {
+      const a = rand(0, Math.PI * 2);
+      const distFrac = rand(0.10, 0.45);
+      const craterRadius = this.radius * rand(0.06, 0.12);
+      this.craters.push([
+        Math.cos(a) * this.radius * distFrac,
+        Math.sin(a) * this.radius * distFrac,
+        craterRadius,
+      ]);
+    }
   }
 
   update(dt) {
@@ -184,6 +279,17 @@ class Asteroid {
       ctx.lineTo(this.verts[i][0], this.verts[i][1]);
     ctx.closePath();
     ctx.stroke();
+
+    ctx.fillStyle   = PALETTE.craterFill;
+    ctx.strokeStyle = PALETTE.craterStroke;
+    ctx.lineWidth   = 1;
+    for (const [cx, cy, cr] of this.craters) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 }
@@ -254,7 +360,7 @@ class Ship {
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = PALETTE.shipNeon;
     ctx.lineWidth   = 1.5;
     ctx.lineJoin    = 'round';
 
@@ -265,7 +371,10 @@ class Ship {
     ctx.lineTo( -7,  0);   // muesca trasera
     ctx.lineTo(-12,  9);   // ala derecha
     ctx.closePath();
+    ctx.shadowColor = PALETTE.shipGlow;
+    ctx.shadowBlur  = 12;
     ctx.stroke();
+    ctx.shadowBlur  = 0;
 
     // Llama del propulsor
     if (this.thrusting && Math.random() > 0.35) {
@@ -675,11 +784,10 @@ function drawOverlay(title, sub) {
 function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
+  drawBackground();
 
   // Recuadro del campo de maniobra: marca exactamente la frontera de wrap()
-  ctx.strokeStyle = '#fff';
+  ctx.strokeStyle = PALETTE.boundary;
   ctx.lineWidth   = 2;
   ctx.strokeRect(1, 1, W - 2, H - 2);
 
